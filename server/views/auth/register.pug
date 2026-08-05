@@ -1,0 +1,49 @@
+extends ../layout
+
+block content
+  .row.justify-content-center
+    .col-md-6.col-lg-5
+      .card.shadow-sm
+        .card-body.p-4
+          h3.text-center.fw-bold.mb-4.text-primary Đăng Ký Tài Khoản
+
+          if errors && Array.isArray(errors)
+            each err in errors
+              .alert.alert-danger.py-2= err.msg
+
+          form(action="/auth/register", method="POST")
+            .mb-3
+              label.form-label.fw-semibold(for="fullname") Họ và tên
+              input#fullname.form-control(type="text", name="fullname", value=(values ? values.fullname : ''), placeholder="Nhập họ và tên", class=(errors && errors.fullname ? 'is-invalid' : ''))
+              if errors && errors.fullname
+                .invalid-feedback= errors.fullname
+
+            .mb-3
+              label.form-label.fw-semibold(for="email") Email
+              input#email.form-control(type="email", name="email", value=(values ? values.email : ''), placeholder="name@example.com", class=(errors && errors.email ? 'is-invalid' : ''))
+              if errors && errors.email
+                .invalid-feedback= errors.email
+
+            .mb-3
+              label.form-label.fw-semibold(for="pwd") Mật khẩu
+              input#pwd.form-control(type="password", name="pwd", placeholder="Tối thiểu 8 ký tự", class=(errors && errors.pwd ? 'is-invalid' : ''))
+              if errors && errors.pwd
+                .invalid-feedback= errors.pwd
+
+            .mb-3
+              label.form-label.fw-semibold(for="confirmPwd") Nhập lại mật khẩu
+              input#confirmPwd.form-control(type="password", name="confirmPwd", placeholder="Nhập lại mật khẩu", class=(errors && errors.confirmPwd ? 'is-invalid' : ''))
+              if errors && errors.confirmPwd
+                .invalid-feedback= errors.confirmPwd
+
+            .mb-3
+              label.form-label.fw-semibold(for="role") Vai trò (Role)
+              select#role.form-select(name="role")
+                option(value="user", selected=(!values || values.role !== 'admin')) User (Người dùng)
+                option(value="admin", selected=(values && values.role === 'admin')) Admin (Quản trị viên)
+
+            button.btn.btn-primary.w-100.py-2.fw-bold(type="submit") Đăng ký
+
+          .text-center.mt-3
+            span Đã có tài khoản? 
+            a(href="/auth/login") Đăng nhập ngay

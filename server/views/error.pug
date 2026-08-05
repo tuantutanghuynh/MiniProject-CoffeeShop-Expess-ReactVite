@@ -1,0 +1,14 @@
+extends layout
+
+block content
+  .row.justify-content-center.mt-5
+    .col-md-6.text-center
+      .card.shadow-sm.p-5
+        i.bi.bi-exclamation-triangle-fill.text-danger.display-1.mb-3
+        h2.fw-bold.text-danger= message || 'Có lỗi xảy ra'
+        if error && error.status
+          h4.text-muted Lỗi mã: #{error.status}
+        if error && error.stack
+          pre.text-start.bg-light.p-3.mt-3.rounded(style="font-size: 12px; max-height: 200px; overflow: auto;")= error.stack
+        .mt-4
+          a.btn.btn-primary(href="/drinks") Trở về trang chủ

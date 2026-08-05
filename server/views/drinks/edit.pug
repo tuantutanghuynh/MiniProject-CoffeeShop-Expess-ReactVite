@@ -1,0 +1,44 @@
+extends ../layout
+
+block content
+  .row.justify-content-center
+    .col-md-7
+      .card.shadow-sm
+        .card-header.bg-primary.text-white.py-3
+          h4.card-title.mb-0.fw-bold Sửa Đồ Uống
+        .card-body.p-4
+          if errors && Array.isArray(errors)
+            each err in errors
+              .alert.alert-danger.py-2= err.msg
+
+          form(action=`/drinks/${drink._id}/update`, method="POST", enctype="multipart/form-data")
+            .mb-3
+              label.form-label.fw-semibold(for="name") Tên đồ uống *
+              input#name.form-control(type="text", name="name", value=drink.name, required)
+
+            .row
+              .col-md-6.mb-3
+                label.form-label.fw-semibold(for="price") Giá tiền (VNĐ) *
+                input#price.form-control(type="number", name="price", value=drink.price, min="0", required)
+              .col-md-6.mb-3
+                label.form-label.fw-semibold(for="category") Danh mục *
+                select#category.form-select(name="category", required)
+                  option(value="") -- Chọn danh mục --
+                  each cat in categories
+                    option(value=cat._id, selected=(drink.category && drink.category.toString() == cat._id.toString()))= cat.name
+
+            .mb-3
+              label.form-label.fw-semibold(for="image") Thay đổi hình ảnh (bỏ qua nếu không đổi)
+              input#image.form-control(type="file", name="image", accept="image/*")
+              if drink.image
+                .mt-2
+                  span.small.text-muted Ảnh hiện tại: 
+                  img.ms-2.rounded(src=`/images/${drink.image}`, style="height: 60px; object-fit: cover;")
+
+            .mb-3
+              label.form-label.fw-semibold(for="description") Mô tả
+              textarea#description.form-control(name="description", rows="3")= drink.description
+
+            .d-flex.justify-content-between.align-items-center.mt-4
+              a.btn.btn-outline-secondary(href="/drinks") Hủy
+              button.btn.btn-primary.px-4(type="submit") Cập nhật

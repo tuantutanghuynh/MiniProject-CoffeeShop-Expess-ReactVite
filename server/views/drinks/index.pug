@@ -1,0 +1,62 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-4
+    h2.fw-bold.mb-0
+      i.bi.bi-cup-hot.me-2.text-warning
+      | Menu Đồ Uống
+    if role === 'admin'
+      a.btn.btn-success(href="/drinks/new")
+        i.bi.bi-plus-lg.me-1
+        | Thêm đồ uống mới
+
+  .card.shadow-sm.mb-4
+    .card-body
+      form(method="GET", action="/drinks")
+        .row.g-2
+          .col-md-5
+            input.form-control(type="text", name="keyword", value=keyword, placeholder="Tìm đồ uống theo tên...")
+          .col-md-4
+            select.form-select(name="categoryId")
+              option(value="") -- Tất cả danh mục --
+              each cat in categories
+                option(value=cat._id, selected=(categoryId == cat._id.toString()))= cat.name
+          .col-md-3
+            button.btn.btn-primary.w-100(type="submit")
+              i.bi.bi-search.me-1
+              | Tìm kiếm
+
+  if drinks.length === 0
+    .alert.alert-info.text-center.py-4
+      i.bi.bi-info-circle-fill.fs-4.d-block.mb-2
+      | Không tìm thấy đồ uống nào.
+  else
+    .row.row-cols-1.row-cols-md-2.row-cols-lg-3.g-4
+      each drink in drinks
+        .col
+          .card.h-100.shadow-sm.drink-card
+            if drink.image
+              img.drink-img(src=`/images/${drink.image}`, alt=drink.name)
+            else
+              .placeholder-img
+                i.bi.bi-cup-straw.fs-1
+            .card-body.d-flex.flex-column
+              .d-flex.justify-content-between.align-items-start.mb-2
+                h5.card-title.fw-bold.mb-0.text-dark= drink.name
+                span.badge.bg-warning.text-dark.fs-6.fw-bold= new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(drink.price)
+              
+              if drink.category
+                p.mb-2
+                  span.badge.bg-info.text-dark= drink.category.name
+              
+              p.card-text.text-muted.small.flex-grow-1= drink.description || 'Chưa có mô tả cho món này.'
+
+              if role === 'admin'
+                .d-flex.justify-content-end.gap-2.mt-3.pt-2.border-top
+                  a.btn.btn-sm.btn-outline-primary(href=`/drinks/${drink._id}/edit`)
+                    i.bi.bi-pencil.me-1
+                    | Sửa
+                  form(action=`/drinks/${drink._id}/delete`, method="POST", onsubmit="return confirm('Bạn có chắc muốn xóa món này?');")
+                    button.btn.btn-sm.btn-outline-danger(type="submit")
+                      i.bi.bi-trash.me-1
+                      | Xóa

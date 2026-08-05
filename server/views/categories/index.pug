@@ -1,0 +1,52 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-4
+    h2.fw-bold.mb-0
+      i.bi.bi-grid-fill.me-2.text-warning
+      | Quản lý Danh mục Đồ uống
+    if role === 'admin'
+      a.btn.btn-success(href="/categories/new")
+        i.bi.bi-plus-lg.me-1
+        | Thêm danh mục mới
+
+  .card.shadow-sm.mb-4
+    .card-body
+      form(method="GET", action="/categories")
+        .row.g-2
+          .col-md-9
+            input.form-control(type="text", name="keyword", value=keyword, placeholder="Tìm kiếm theo tên danh mục...")
+          .col-md-3
+            button.btn.btn-primary.w-100(type="submit")
+              i.bi.bi-search.me-1
+              | Tìm kiếm
+
+  if categories.length === 0
+    .alert.alert-info.text-center.py-4
+      i.bi.bi-info-circle-fill.fs-4.d-block.mb-2
+      | Chưa có danh mục nào được tạo.
+  else
+    .table-responsive.card.shadow-sm
+      table.table.table-hover.align-middle.mb-0
+        thead.table-dark
+          tr
+            th(style="width: 5%") #
+            th(style="width: 30%") Tên danh mục
+            th Mô tả
+            if role === 'admin'
+              th.text-end(style="width: 20%") Thao tác
+        tbody
+          each cat, index in categories
+            tr
+              td.fw-bold= index + 1
+              td.fw-semibold.text-primary= cat.name
+              td.text-muted= cat.description || 'Chưa có mô tả'
+              if role === 'admin'
+                td.text-end
+                  a.btn.btn-sm.btn-outline-primary.me-2(href=`/categories/${cat._id}/edit`)
+                    i.bi.bi-pencil.me-1
+                    | Sửa
+                  form.d-inline(action=`/categories/${cat._id}/delete`, method="POST", onsubmit="return confirm('Bạn có chắc muốn xóa danh mục này?');")
+                    button.btn.btn-sm.btn-outline-danger(type="submit")
+                      i.bi.bi-trash.me-1
+                      | Xóa

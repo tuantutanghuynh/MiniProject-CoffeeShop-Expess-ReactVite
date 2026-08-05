@@ -1,0 +1,27 @@
+extends ../layout
+
+block content
+  .row.justify-content-center
+    .col-md-6
+      .card.shadow-sm
+        .card-header.bg-primary.text-white.py-3
+          h4.card-title.mb-0.fw-bold Sửa Danh Mục
+        .card-body.p-4
+          if errors && Array.isArray(errors)
+            each err in errors
+              .alert.alert-danger.py-2= err.msg
+
+          form(action=`/categories/${category._id}/update`, method="POST")
+            .mb-3
+              label.form-label.fw-semibold(for="name") Tên danh mục *
+              input#name.form-control(type="text", name="name", value=category.name, placeholder="Ví dụ: Cà phê, Trà sữa...", class=(errors && errors.name ? 'is-invalid' : ''))
+              if errors && errors.name
+                .invalid-feedback= errors.name
+
+            .mb-3
+              label.form-label.fw-semibold(for="description") Mô tả
+              textarea#description.form-control(name="description", rows="3", placeholder="Mô tả ngắn về danh mục...")= category.description
+
+            .d-flex.justify-content-between.align-items-center.mt-4
+              a.btn.btn-outline-secondary(href="/categories") Hủy
+              button.btn.btn-primary.px-4(type="submit") Cập nhật
