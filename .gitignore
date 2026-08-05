@@ -31,3 +31,8 @@ build/
 
 # Internal docs (not published to GitHub)
 docs/
+
+# All Markdown / PDF files except README.md
+*.md
+*.pdf
+!README.md
