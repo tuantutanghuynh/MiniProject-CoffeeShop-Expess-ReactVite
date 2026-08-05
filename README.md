@@ -1,61 +1,61 @@
 # ☕ Coffee Shop Express
 
-Ứng dụng quản lý quán cà phê xây dựng bằng **Node.js + Express + MongoDB (Mongoose)**, giao diện render phía server bằng **Pug**. Hỗ trợ đăng ký/đăng nhập, quản lý danh mục và đồ uống với phân quyền Admin/User.
+A coffee shop management application built with **Node.js + Express + MongoDB (Mongoose)**, server-side rendered with **Pug**. Supports registration/login, category and drink management with Admin/User role-based access.
 
-## 🚀 Tính năng
+## 🚀 Features
 
-- **Xác thực người dùng**: đăng ký, đăng nhập, đăng xuất (session-based, mật khẩu mã hoá với `bcrypt`).
-- **Phân quyền**: Admin có toàn quyền thêm/sửa/xoá; User chỉ xem.
-- **Quản lý danh mục (Category)**: CRUD danh mục đồ uống.
-- **Quản lý đồ uống (Drink)**: CRUD đồ uống, upload hình ảnh (`multer`).
-- **Validate dữ liệu** đầu vào với `express-validator`.
+- **User authentication**: register, login, logout (session-based, passwords hashed with `bcrypt`).
+- **Role-based access**: Admins have full CRUD rights; Users have read-only access.
+- **Category management**: full CRUD for drink categories.
+- **Drink management**: full CRUD for drinks, with image upload (`multer`).
+- **Input validation** with `express-validator`.
 
-## 🛠️ Công nghệ sử dụng
+## 🛠️ Tech Stack
 
-| Thành phần       | Công nghệ                          |
-|-------------------|-------------------------------------|
-| Backend           | Node.js, Express 5                 |
-| Database          | MongoDB, Mongoose                  |
-| View engine       | Pug                                 |
-| Xác thực          | express-session, bcrypt             |
-| Validate          | express-validator                   |
-| Upload file       | multer                              |
-| Khác              | dotenv, morgan, method-override     |
+| Layer             | Technology                          |
+|-------------------|--------------------------------------|
+| Backend           | Node.js, Express 5                  |
+| Database          | MongoDB, Mongoose                   |
+| View engine       | Pug                                  |
+| Authentication    | express-session, bcrypt              |
+| Validation        | express-validator                    |
+| File upload       | multer                               |
+| Others            | dotenv, morgan, method-override      |
 
-## 📁 Cấu trúc thư mục
+## 📁 Project Structure
 
 ```
 server/
 ├── bin/               # Entry point (www)
-├── config/            # Kết nối database
-├── controllers/       # Xử lý logic request
+├── config/            # Database connection
+├── controllers/       # Request handling logic
 ├── middlewares/       # requireLogin, requireAdmin, upload
 ├── models/            # Mongoose schemas (account, category, drink, order, user)
-├── public/            # Static assets (CSS, hình ảnh)
-├── routes/            # Định tuyến (auth, category, drink)
+├── public/            # Static assets (CSS, images)
+├── routes/            # Routing (auth, category, drink)
 ├── services/          # JWT service
-├── views/             # Giao diện Pug
-└── app.js             # Khởi tạo Express app
+├── views/             # Pug views
+└── app.js             # Express app entry point
 ```
 
-## ⚙️ Cài đặt & Chạy dự án
+## ⚙️ Setup & Run
 
-### 1. Clone repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/tuantutanghuynh/MiniProject-CoffeeShop-Expess-ReactVite.git
 cd MiniProject-CoffeeShop-Expess-ReactVite/server
 ```
 
-### 2. Cài đặt dependencies
+### 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Cấu hình biến môi trường
+### 3. Configure environment variables
 
-Tạo file `.env` trong thư mục `server/` với nội dung:
+Create a `.env` file inside the `server/` folder:
 
 ```env
 PORT=3000
@@ -63,25 +63,25 @@ MONGODB_URI=mongodb://localhost:27017/coffeeshop
 SESSION_SECRET=your_secret_key
 ```
 
-### 4. Chạy ứng dụng
+### 4. Run the app
 
 ```bash
-# Chế độ development (tự reload khi code thay đổi)
+# Development mode (auto-reload on changes)
 npm run dev
 
-# Chế độ production
+# Production mode
 npm start
 ```
 
-Ứng dụng chạy tại: `http://localhost:3000`
+The app runs at: `http://localhost:3000`
 
-## 🔑 Phân quyền
+## 🔑 Roles & Permissions
 
-| Vai trò | Quyền hạn                                   |
-|---------|----------------------------------------------|
-| Admin   | Xem, thêm, sửa, xoá danh mục & đồ uống        |
-| User    | Chỉ xem danh mục & đồ uống                    |
+| Role    | Permissions                                    |
+|---------|--------------------------------------------------|
+| Admin   | View, create, edit, delete categories & drinks    |
+| User    | View categories & drinks only                     |
 
 ## 📜 License
 
-Dự án phục vụ mục đích học tập.
+This project is for educational purposes.
