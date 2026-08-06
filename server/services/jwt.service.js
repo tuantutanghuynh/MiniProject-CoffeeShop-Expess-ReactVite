@@ -44,8 +44,8 @@ exports.verifyAccessToken = (token) => {
 };
 
 //verify Refress token
-exports.verifyRefressToken = (token) => {
-    return jwt.verify(token, env.ACCESS_TOKEN_SECRET, {
+exports.verifyRefreshToken = (token) => {
+    return jwt.verify(token, env.REFRESH_TOKEN_SECRET, {
         algorithms: [ALGORITHM],
         issuer: env.JWT_ISSUER,
         audience: env.JWT_AUDIENCE
