@@ -1,71 +1,69 @@
+// Đọc biến môi trường từ file .env
 require('dotenv').config();
+
+// Thư viện http-errors để sinh lỗi HTTP chuẩn
 const createError = require('http-errors');
+
+// Thư viện Express Web Framework
 const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
-const session = require('express-session');
-const methodOverride = require('method-override');
 
+// Thư viện CORS cho phép React Frontend kết nối tới API từ domain/port khác
+const cors = require('cors');
+
+// Hàm kết nối CSDL MongoDB
 const connectDB = require('./config/db');
 
-// Connect Database
+// Thực hiện kết nối CSDL khi khởi động ứng dụng
 connectDB();
 
-const indexRouter = require('./routes/index');
-const authRouter = require('./routes/auth.route');
-const categoryRouter = require('./routes/category.route');
-const drinkRouter = require('./routes/drink.route');
+// Nạp các Router REST API v1
+const apiAuthRouter = require('./routes/api.auth.route');
+const apiCategoryRouter = require('./routes/api.category.route');
+const apiDrinkRouter = require('./routes/api.drink.route');
+const apiOrderRouter = require('./routes/api.order.route');
 
+// Khởi tạo ứng dụng Express
 const app = express();
 
-// View engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'pug');
+app.use(cors());                          // Bật CORS cho phép ứng dụng React Frontend kết nối
+app.use(logger('dev'));                    // In log HTTP Request ra màn hình Terminal
+app.use(express.json());                   // Middleware đọc dữ liệu JSON gửi trong Request Body
+app.use(express.urlencoded({ extended: false })); // Middleware đọc dữ liệu Form URL Encoded
+app.use(cookieParser());                   // Middleware đọc HTTP Cookie
 
-app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(methodOverride('_method'));
-app.use(express.static(path.join(__dirname, 'public')));
+// Phục vụ file tĩnh (Static Files) cho ảnh sản phẩm được upload trong thư mục public
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// Session setup
-app.use(
-    session({
-        secret: process.env.SESSION_SECRET || 'coffee_secret',
-        resave: false,
-        saveUninitialized: false,
-        cookie: { maxAge: 24 * 60 * 60 * 1000 } // 1 day
-    })
-);
+// Gắn nhóm định tuyến RESTful API v1
+app.use('/api/v1/auth', apiAuthRouter);
+app.use('/api/v1/categories', apiCategoryRouter);
+app.use('/api/v1/drinks', apiDrinkRouter);
+app.use('/api/v1/orders', apiOrderRouter);
 
-// Global locals for views
-app.use((req, res, next) => {
-    res.locals.accountId = req.session.accountId || null;
-    res.locals.fullname = req.session.fullname || null;
-    res.locals.role = req.session.role || null;
-    next();
+// Endpoint Health Check kiểm tra trạng thái hoạt động của Server
+app.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Coffee Shop RESTful API Server đang hoạt động trơn tru!',
+        version: 'v1'
+    });
 });
 
-// Routes
-app.use('/', indexRouter);
-app.use('/auth', authRouter);
-app.use('/categories', categoryRouter);
-app.use('/drinks', drinkRouter);
-
-// Catch 404 and forward to error handler
+// Bắt lỗi 404 Not Found nếu client gọi URL không tồn tại
 app.use(function (req, res, next) {
-    next(createError(404));
+    next(createError(404, 'Endpoint không tồn tại trên hệ thống API.'));
 });
 
-// Error handler
+// Middleware Xử Lỗi Toàn Cục (Global API Error Handler)
 app.use(function (err, req, res, next) {
-    res.locals.message = err.message;
-    res.locals.error = req.app.get('env') === 'development' ? err : {};
-
-    res.status(err.status || 500);
-    res.render('error', { title: 'Lỗi ' + (err.status || 500) });
+    res.status(err.status || 500).json({
+        success: false,
+        code: err.code || 'INTERNAL_SERVER_ERROR',
+        message: err.message || 'Lỗi hệ thống máy chủ.'
+    });
 });
 
 module.exports = app;
