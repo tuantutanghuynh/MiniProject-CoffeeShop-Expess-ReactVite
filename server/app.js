@@ -7,7 +7,6 @@ const createError = require('http-errors');
 // Express Web Framework
 const express = require('express');
 const path = require('path');
-const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 
 // CORS middleware allowing React Frontend cross-origin requests
@@ -45,7 +44,6 @@ app.use(cors({
 app.use(logger('dev'));                    // Log HTTP requests in dev mode
 app.use(express.json());                   // Parse JSON Request Body
 app.use(express.urlencoded({ extended: false })); // Parse Form URL-encoded data
-app.use(cookieParser());                   // Parse HTTP Cookies
 
 // Serve static files for uploaded drink images in public folder
 app.use('/public', express.static(path.join(__dirname, 'public')));
@@ -72,11 +70,17 @@ app.use(function (req, res, next) {
 
 // Global API Error Handler Middleware
 app.use(function (err, req, res, next) {
-    res.status(err.status || 500).json({
+    const status = err.status || 500;
+
+    //chỉ log chi tiết lỗi thực sự thuộc về server
+    if (status >= 500) {
+        console.error(err);
+    }
+
+    res.status(status).json({
         success: false,
         code: err.code || 'INTERNAL_SERVER_ERROR',
-        message: err.message || 'Internal Server Error.'
+        message: err.expose? err.message : 'Internal Server Error'
     });
 });
-
 module.exports = app;
