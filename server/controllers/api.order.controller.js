@@ -1,83 +1,79 @@
-// Nạp Models Order và Drink
+const createError = require('http-errors');
 const Order = require('../models/order.model');
 const Drink = require('../models/drink.model');
 
 /**
- * [POST] /api/v1/orders - Khách hàng đặt đơn hàng mới
- * Quy tắc an toàn: Server-side Total Price Calculation (Tự tính toán giá tiền phía Server)
+ * Create Order API (Server-side Total Price Calculation for Security)
  */
 exports.createOrder = async (req, res, next) => {
     try {
         const { items, phone, address, note } = req.body;
-        const userId = req.user.id; // Lấy từ token đã verify ở middleware authenticateJWT
+        const userId = req.user.id;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({ success: false, message: 'Đơn hàng phải có ít nhất 1 món.' });
+            throw createError(400, 'Order cart items cannot be empty.');
         }
 
-        let calculatedTotal = 0;
-        const processedItems = [];
+        if (!phone || !address) {
+            throw createError(400, 'Phone number and delivery address are required.');
+        }
 
-        // Duyệt từng món ăn gửi lên để Server tự tra giá gốc trong DB
+        let calculatedTotalAmount = 0;
+        const orderSnapshotItems = [];
+
         for (const item of items) {
-            const drink = await Drink.findOne({ _id: item.drinkId, isDeleted: false });
-            if (!drink || !drink.isAvailable) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: `Món ăn [${item.drinkId}] hiện tạm hết hoặc không tồn tại.` 
-                });
+            const drink = await Drink.findOne({ _id: item.drinkId, isDeleted: false, isAvailable: true });
+            if (!drink) {
+                throw createError(400, `Drink item ID ${item.drinkId} is unavailable or does not exist.`);
             }
 
-            let itemPrice = drink.price; // Đơn giá gốc từ DB
+            let itemUnitPrice = drink.price;
 
-            // Cộng thêm phụ thu của Size nếu khách chọn
+            // Calculate size extra price
             if (item.selectedSize && drink.sizes && drink.sizes.length > 0) {
                 const foundSize = drink.sizes.find(s => s.name === item.selectedSize);
-                if (foundSize) itemPrice += foundSize.extraPrice;
+                if (foundSize) {
+                    itemUnitPrice += foundSize.extraPrice;
+                }
             }
 
-            // Cộng thêm giá tiền các Toppings nếu khách chọn
-            let selectedToppingNames = [];
-            if (item.selectedToppings && Array.isArray(item.selectedToppings)) {
+            // Calculate toppings price
+            if (item.selectedToppings && Array.isArray(item.selectedToppings) && drink.toppings) {
                 for (const topName of item.selectedToppings) {
-                    const foundTop = drink.toppings.find(t => t.name === topName);
-                    if (foundTop) {
-                        itemPrice += foundTop.price;
-                        selectedToppingNames.push(foundTop.name);
+                    const foundTopping = drink.toppings.find(t => t.name === topName);
+                    if (foundTopping) {
+                        itemUnitPrice += foundTopping.price;
                     }
                 }
             }
 
-            // Thành tiền món = (giá gốc + size + toppings) * số lượng
-            const itemSubtotal = itemPrice * item.quantity;
-            calculatedTotal += itemSubtotal;
+            const itemTotalPrice = itemUnitPrice * item.quantity;
+            calculatedTotalAmount += itemTotalPrice;
 
-            // Lưu snapshot thông tin món ăn tại thời điểm đặt đơn
-            processedItems.push({
+            orderSnapshotItems.push({
                 drink: drink._id,
                 name: drink.name,
-                price: itemPrice,
-                quantity: item.quantity,
+                price: itemUnitPrice,
                 selectedSize: item.selectedSize || 'M',
-                selectedToppings: selectedToppingNames
+                selectedToppings: item.selectedToppings || [],
+                quantity: item.quantity
             });
         }
 
-        // Tạo instance Order mới với giá tiền Server tự tính toán
-        const newOrder = new Order({
+        const newOrder = await Order.create({
             user: userId,
-            items: processedItems,
-            totalAmount: calculatedTotal,
+            items: orderSnapshotItems,
+            totalAmount: calculatedTotalAmount,
             phone,
             address,
-            note: note ? note.trim() : ''
+            note,
+            status: 'pending'
         });
 
-        await newOrder.save();
-        res.status(201).json({ 
-            success: true, 
-            message: 'Đặt đơn hàng thành công!', 
-            data: newOrder 
+        res.status(201).json({
+            success: true,
+            message: 'Order placed successfully.',
+            data: newOrder
         });
     } catch (error) {
         next(error);
@@ -85,55 +81,67 @@ exports.createOrder = async (req, res, next) => {
 };
 
 /**
- * [GET] /api/v1/orders/my-orders - Xem lịch sử đơn hàng của người dùng hiện tại
+ * Get My Orders API (Authenticated User)
  */
 exports.getMyOrders = async (req, res, next) => {
     try {
-        const orders = await Order.find({ user: req.user.id }).sort({ createdAt: -1 });
-        res.json({ success: true, data: orders });
+        const orders = await Order.find({ user: req.user.id })
+            .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            data: orders
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * [GET] /api/v1/orders - Xem toàn bộ đơn hàng hệ thống (Admin)
+ * Get All Orders API (Admin Only)
  */
 exports.getAllOrders = async (req, res, next) => {
     try {
-        const { status } = req.query;
-        let query = {};
-        if (status) query.status = status;
-
-        const orders = await Order.find(query)
+        const orders = await Order.find()
             .populate('user', 'fullname email')
             .sort({ createdAt: -1 });
 
-        res.json({ success: true, count: orders.length, data: orders });
+        res.json({
+            success: true,
+            data: orders
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * [PATCH] /api/v1/orders/:id/status - Cập nhật riêng trạng thái đơn hàng (Admin)
+ * Update Order Status API (Admin Only - PATCH)
  */
 exports.updateOrderStatus = async (req, res, next) => {
     try {
         const { status } = req.body;
         const validStatuses = ['pending', 'confirmed', 'shipping', 'completed', 'cancelled'];
-        
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ success: false, message: 'Trạng thái đơn hàng không hợp lệ.' });
+
+        if (!status || !validStatuses.includes(status)) {
+            throw createError(400, 'Invalid order status. Allowed: ' + validStatuses.join(', '));
         }
 
-        const order = await Order.findByIdAndUpdate(
-            req.params.id, 
-            { status }, 
+        const updatedOrder = await Order.findByIdAndUpdate(
+            req.params.id,
+            { status },
             { new: true }
         );
 
-        res.json({ success: true, message: 'Cập nhật trạng thái đơn thành công!', data: order });
+        if (!updatedOrder) {
+            throw createError(404, 'Order not found.');
+        }
+
+        res.json({
+            success: true,
+            message: 'Order status updated successfully.',
+            data: updatedOrder
+        });
     } catch (error) {
         next(error);
     }

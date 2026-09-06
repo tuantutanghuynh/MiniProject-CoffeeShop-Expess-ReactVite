@@ -1,35 +1,32 @@
-// Thư viện Mongoose để làm việc với MongoDB
 const mongoose = require('mongoose');
-
-// Thư viện bcrypt dùng để băm (hash) mật khẩu và so sánh mật khẩu an toàn
 const bcrypt = require('bcrypt');
 
 /**
- * Khai báo Schema cho Người dùng (User Schema)
+ * User Model Schema
  */
 const userSchema = new mongoose.Schema(
     {
         fullname: {
             type: String,
-            required: [true, 'Họ tên không được để trống'],
-            trim: true // Tự động cắt bỏ khoảng trắng thừa ở đầu và cuối chuỗi
+            required: [true, 'Full name is required'],
+            trim: true
         },
         email: {
             type: String,
-            required: [true, 'Email không được để trống'],
-            unique: true, // Tạo Unique Index trong MongoDB ngăn trùng lặp email
-            lowercase: true, // Tự động chuyển email về chữ viết thường
+            required: [true, 'Email address is required'],
+            unique: true,
+            lowercase: true,
             trim: true
         },
         password: {
             type: String,
-            required: [true, 'Mật khẩu không được để trống'],
-            minlength: [6, 'Mật khẩu phải có ít nhất 6 ký tự']
+            required: [true, 'Password is required'],
+            minlength: [6, 'Password must be at least 6 characters']
         },
         role: {
             type: String,
-            enum: ['user', 'admin'], // Chỉ cho phép 1 trong 2 giá trị này
-            default: 'user'         // Mặc định tài khoản mới là người dùng phổ thông
+            enum: ['user', 'admin'],
+            default: 'user'
         },
         avatar: {
             type: String,
@@ -37,35 +34,30 @@ const userSchema = new mongoose.Schema(
         },
         isDeleted: {
             type: Boolean,
-            default: false // Trạng thái vô hiệu hóa / xóa mềm
+            default: false
         }
     },
     {
-        timestamps: true // Tự động sinh ra 2 trường createdAt và updatedAt
+        timestamps: true
     }
 );
 
 /**
- * Pre-save Hook: Tự động mã hóa mật khẩu trước khi lưu document vào MongoDB
- * Bắt buộc dùng `function` truyền thống để từ khóa `this` trỏ đúng tới Document User chuẩn bị lưu.
+ * Pre-save Hook: Automatically hash password before saving to MongoDB
  */
-userSchema.pre('save', async function (next) {
-    // Nếu mật khẩu không bị thay đổi (ví dụ khi sửa tên hoặc avatar), bỏ qua bước mã hóa
-    if (!this.isModified('password')) return next();
-
-    try {
-        // Sinh muối (salt) với độ phức tạp cost factor = 10
-        const salt = await bcrypt.genSalt(10);
-        
-        // Băm mật khẩu bằng salt
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (error) {
-        next(error);
-    }
+userSchema.pre('save', async function () {
+    if (!this.isModified('password')) return;
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Tạo Model tên 'User' từ userSchema
+/**
+ * Instance Method: Compare input candidate password with hashed password
+ */
+userSchema.methods.comparePassword = async function (candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
+};
+
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;

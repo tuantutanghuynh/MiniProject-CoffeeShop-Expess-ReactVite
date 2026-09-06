@@ -1,52 +1,39 @@
-// Thư viện multer chuyên dùng xử lý Multipart Form Data (Upload File) trong Express
 const multer = require('multer');
-
-// Module path dùng để thao tác với đường dẫn thư mục và đuôi định dạng file
 const path = require('path');
+const createError = require('http-errors');
 
 /**
- * Cấu hình nơi lưu trữ file (Storage Engine) trên ổ đĩa Server
+ * Multer Disk Storage Configuration
  */
 const storage = multer.diskStorage({
-    // Định nghĩa thư mục lưu trữ file upload
     destination: function (req, file, cb) {
-        // cb(null, path_to_directory): Tham số 1 là null (không có lỗi), tham số 2 là đường dẫn thư mục
         cb(null, path.join(__dirname, '../public/images'));
     },
-    // Định nghĩa quy tắc đặt tên file độc nhất để tránh bị trùng lặp/ghi đè file
     filename: function (req, file, cb) {
-        // Tạo chuỗi thời gian ngẫu nhiên: Date.now() kết hợp số ngẫu nhiên 9 chữ số
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        
-        // Trích xuất đuôi file gốc (ví dụ: .jpg, .png)
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         const ext = path.extname(file.originalname);
-        
-        // Đặt tên file hoàn chỉnh: image-1722435000000-849201934.jpg
-        cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+        cb(null, 'drink-' + uniqueSuffix + ext);
     }
 });
 
 /**
- * Bộ lọc định dạng file (File Filter) - Chỉ chấp nhận các file hình ảnh
+ * File MIME Type Filter (Images only: jpg, jpeg, png, webp, gif)
  */
 const fileFilter = (req, file, cb) => {
-    // Kiểm tra định dạng MIME type của file upload
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true); // Chấp nhận file
+    const allowedTypes = /jpeg|jpg|png|webp|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+        return cb(null, true);
     } else {
-        cb(new Error('Chỉ chấp nhận các file ảnh định dạng JPG, JPEG, PNG, WEBP!'), false);
+        cb(createError(400, 'Only image files (jpg, jpeg, png, webp, gif) are allowed!'));
     }
 };
 
-/**
- * Khởi tạo Middleware Multer với các cấu hình lưu trữ, giới hạn kích thước và bộ lọc
- */
 const upload = multer({
     storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // Giới hạn kích thước file tối đa 5MB
-    },
+    limits: { fileSize: 5 * 1024 * 1024 }, // Limit max file size to 5MB
     fileFilter: fileFilter
 });
 

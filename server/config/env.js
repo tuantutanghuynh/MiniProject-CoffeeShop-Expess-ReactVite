@@ -1,28 +1,28 @@
-// Đọc biến môi trường từ file .env vào process.env của Node.js runtime
-require('dotenv').config();
+/**
+ * Enterprise Environment Variable Management & Validation Module
+ */
 
-// Danh sách các biến môi trường BẮT BUỘC phải khai báo (Enterprise Security Rule)
-const requireEnvs = ['ACCESS_TOKEN_SECRET', 'REFRESH_TOKEN_SECRET', 'MONGO_URI'];
+const jwtAccessSecret = process.env.JWT_ACCESS_SECRET || process.env.ACCESS_TOKEN_SECRET;
+const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET;
 
-// Duyệt qua từng biến bắt buộc để kiểm tra sự tồn tại
-for (const envName of requireEnvs) {
-    if (!process.env[envName]) {
-        // In cảnh báo Fatal Error ra Console nếu bị thiếu Secret
-        console.error(`❌ [FATAL SECURITY ERROR] Khuyết biến môi trường bắt buộc: ${envName}`);
-        
-        // Ngắt ứng dụng ngay lập tức, ngầm ngăn chặn việc khởi động Server với Secret mặc định yếu
-        process.exit(1);
-    }
+if (!jwtAccessSecret || !jwtRefreshSecret) {
+    console.error('[FATAL ERROR] Missing required JWT secrets in environment variables.');
+    console.error('Please configure JWT_ACCESS_SECRET and JWT_REFRESH_SECRET in your .env file.');
+    process.exit(1);
 }
 
-// Export một Object chứa toàn bộ cấu hình hệ thống đã được validate an toàn
 module.exports = {
-    PORT: process.env.PORT || 3000,                               // Cổng lắng nghe HTTP Server
-    MONGO_URI: process.env.MONGO_URI,                            // Chuỗi kết nối MongoDB Database
-    ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET,        // Secret Key dùng để ký Access Token
-    REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,      // Secret Key dùng để ký Refresh Token
-    JWT_ISSUER: process.env.JWT_ISSUER || 'coffeeshop-api',      // Định danh Server phát hành Token (iss claim)
-    JWT_AUDIENCE: process.env.JWT_AUDIENCE || 'coffeeshop-client', // Định danh Đối tượng nhận Token (aud claim)
-    REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',           // Địa chỉ IP/Domain của Redis Server
-    REDIS_PORT: Number(process.env.REDIS_PORT) || 6379           // Cổng mạng của Redis Server (chuyển sang kiểu Số)
+    PORT: process.env.PORT || 3000,
+    MONGODB_URI: process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/coffee_shop',
+    
+    JWT_ACCESS_SECRET: jwtAccessSecret,
+    JWT_REFRESH_SECRET: jwtRefreshSecret,
+    JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+
+    REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+    REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
+    REDIS_PASSWORD: process.env.REDIS_PASSWORD || undefined,
+
+    CORS_ORIGIN: process.env.CORS_ORIGIN || '*'
 };

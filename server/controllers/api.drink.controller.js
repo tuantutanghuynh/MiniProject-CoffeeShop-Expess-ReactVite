@@ -1,129 +1,204 @@
-// Nạp Model Drink và các thư viện File System
-const Drink = require('../models/drink.model');
+const createError = require('http-errors');
 const fs = require('fs');
 const path = require('path');
+const Drink = require('../models/drink.model');
+const Category = require('../models/category.model');
 
 /**
- * [GET] /api/v1/drinks - Lấy danh sách đồ uống (Hỗ trợ lọc theo keyword, categoryId, isAvailable)
+ * Get List of Drinks API (Filter by keyword, categoryId, isAvailable)
  */
 exports.getDrinks = async (req, res, next) => {
     try {
         const { keyword, categoryId, isAvailable } = req.query;
-        let query = { isDeleted: false }; // Chỉ lấy các món CHƯA bị xóa mềm
+        let query = { isDeleted: false };
 
-        if (keyword && keyword.trim() !== '') {
-            query.name = { $regex: keyword.trim(), $options: 'i' };
+        if (keyword) {
+            query.name = { $regex: keyword, $options: 'i' };
         }
-        if (categoryId && categoryId.trim() !== '') {
+
+        if (categoryId) {
             query.category = categoryId;
         }
+
         if (isAvailable !== undefined) {
             query.isAvailable = isAvailable === 'true';
         }
 
-        // populate('category') thực hiện JOIN phụ để lấy tên và mô tả của danh mục
         const drinks = await Drink.find(query)
             .populate('category', 'name description')
             .sort({ createdAt: -1 });
 
-        res.json({ success: true, count: drinks.length, data: drinks });
+        res.json({
+            success: true,
+            data: drinks
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * [GET] /api/v1/drinks/:id - Lấy thông tin chi tiết của 1 đồ uống
+ * Get Drink by ID API
  */
 exports.getDrinkById = async (req, res, next) => {
     try {
-        const drink = await Drink.findOne({ _id: req.params.id, isDeleted: false }).populate('category', 'name');
+        const drink = await Drink.findOne({ _id: req.params.id, isDeleted: false })
+            .populate('category', 'name description');
+
         if (!drink) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy đồ uống yêu cầu.' });
+            throw createError(404, 'Drink not found.');
         }
-        res.json({ success: true, data: drink });
+
+        res.json({
+            success: true,
+            data: drink
+        });
     } catch (error) {
         next(error);
     }
 };
 
 /**
- * [POST] /api/v1/drinks - Thêm mới đồ uống kèm Upload ảnh (Admin)
+ * Create Drink API (Admin Only + Multer File Upload)
  */
 exports.createDrink = async (req, res, next) => {
     try {
-        const { name, price, category, description, sizes, toppings } = req.body;
-        
-        // Lấy tên file ảnh đã được Multer middleware xử lý lưu vào đĩa
-        const image = req.file ? req.file.filename : '';
+        const { name, price, category, description, isAvailable, sizes, toppings } = req.body;
 
-        const drink = new Drink({
+        if (!name || !price || !category) {
+            if (req.file) {
+                fs.unlinkSync(req.file.path);
+            }
+            throw createError(400, 'Drink name, price, and category are required.');
+        }
+
+        const categoryExists = await Category.findById(category);
+        if (!categoryExists) {
+            if (req.file) {
+                fs.unlinkSync(req.file.path);
+            }
+            throw createError(400, 'Selected category does not exist.');
+        }
+
+        let parsedSizes = [];
+        let parsedToppings = [];
+
+        if (sizes) {
+            parsedSizes = typeof sizes === 'string' ? JSON.parse(sizes) : sizes;
+        }
+        if (toppings) {
+            parsedToppings = typeof toppings === 'string' ? JSON.parse(toppings) : toppings;
+        }
+
+        const newDrink = await Drink.create({
             name: name.trim(),
             price: Number(price),
             category,
-            image,
-            description: description ? description.trim() : '',
-            sizes: sizes ? JSON.parse(sizes) : [],       // Parse chuỗi JSON gửi từ FormData
-            toppings: toppings ? JSON.parse(toppings) : [] // Parse chuỗi JSON gửi từ FormData
+            description,
+            image: req.file ? req.file.filename : null,
+            isAvailable: isAvailable !== undefined ? isAvailable : true,
+            sizes: parsedSizes,
+            toppings: parsedToppings
         });
 
-        await drink.save();
-        res.status(201).json({ success: true, message: 'Thêm đồ uống thành công!', data: drink });
+        res.status(201).json({
+            success: true,
+            message: 'Drink created successfully.',
+            data: newDrink
+        });
     } catch (error) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         next(error);
     }
 };
 
 /**
- * [PUT] /api/v1/drinks/:id - Cập nhật đồ uống (Admin)
+ * Update Drink API (Admin Only + Multer File Upload)
  */
 exports.updateDrink = async (req, res, next) => {
     try {
         const drinkId = req.params.id;
-        const drink = await Drink.findById(drinkId);
-        if (!drink) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy đồ uống.' });
-        }
-
         const { name, price, category, description, isAvailable, sizes, toppings } = req.body;
-        let imageName = drink.image;
 
-        // Nếu người dùng upload ảnh mới ➔ Xóa ảnh cũ trên đĩa cứng
-        if (req.file) {
-            if (drink.image) {
-                const oldPath = path.join(__dirname, '../public/images', drink.image);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        const existingDrink = await Drink.findOne({ _id: drinkId, isDeleted: false });
+        if (!existingDrink) {
+            if (req.file) {
+                fs.unlinkSync(req.file.path);
             }
-            imageName = req.file.filename;
+            throw createError(404, 'Drink to update was not found.');
         }
 
-        drink.name = name ? name.trim() : drink.name;
-        drink.price = price !== undefined ? Number(price) : drink.price;
-        drink.category = category || drink.category;
-        drink.image = imageName;
-        drink.description = description !== undefined ? description.trim() : drink.description;
-        drink.isAvailable = isAvailable !== undefined ? (isAvailable === 'true' || isAvailable === true) : drink.isAvailable;
-        if (sizes) drink.sizes = JSON.parse(sizes);
-        if (toppings) drink.toppings = JSON.parse(toppings);
+        let imageFilename = existingDrink.image;
 
-        await drink.save();
-        res.json({ success: true, message: 'Cập nhật đồ uống thành công!', data: drink });
+        if (req.file) {
+            imageFilename = req.file.filename;
+            if (existingDrink.image) {
+                const oldImagePath = path.join(__dirname, '../public/images', existingDrink.image);
+                if (fs.existsSync(oldImagePath)) {
+                    fs.unlinkSync(oldImagePath);
+                }
+            }
+        }
+
+        let parsedSizes = existingDrink.sizes;
+        let parsedToppings = existingDrink.toppings;
+
+        if (sizes) {
+            parsedSizes = typeof sizes === 'string' ? JSON.parse(sizes) : sizes;
+        }
+        if (toppings) {
+            parsedToppings = typeof toppings === 'string' ? JSON.parse(toppings) : toppings;
+        }
+
+        const updatedDrink = await Drink.findByIdAndUpdate(
+            drinkId,
+            {
+                name: name ? name.trim() : existingDrink.name,
+                price: price ? Number(price) : existingDrink.price,
+                category: category || existingDrink.category,
+                description: description !== undefined ? description : existingDrink.description,
+                image: imageFilename,
+                isAvailable: isAvailable !== undefined ? isAvailable : existingDrink.isAvailable,
+                sizes: parsedSizes,
+                toppings: parsedToppings
+            },
+            { new: true, runValidators: true }
+        ).populate('category', 'name description');
+
+        res.json({
+            success: true,
+            message: 'Drink updated successfully.',
+            data: updatedDrink
+        });
     } catch (error) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         next(error);
     }
 };
 
 /**
- * [DELETE] /api/v1/drinks/:id - Xóa mềm đồ uống (Soft Delete: isDeleted = true)
+ * Soft Delete Drink API (Admin Only)
  */
 exports.deleteDrink = async (req, res, next) => {
     try {
-        const drink = await Drink.findById(req.params.id);
-        if (drink) {
-            drink.isDeleted = true; // Xóa mềm giữ toàn vẹn dữ liệu đơn hàng cũ
-            await drink.save();
+        const drink = await Drink.findByIdAndUpdate(
+            req.params.id,
+            { isDeleted: true },
+            { new: true }
+        );
+
+        if (!drink) {
+            throw createError(404, 'Drink to delete was not found.');
         }
-        res.json({ success: true, message: 'Xóa đồ uống thành công!' });
+
+        res.json({
+            success: true,
+            message: 'Drink deleted successfully.'
+        });
     } catch (error) {
         next(error);
     }

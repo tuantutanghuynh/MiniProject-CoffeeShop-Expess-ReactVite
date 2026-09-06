@@ -1,63 +1,41 @@
-// Nạp Model User
+const createError = require('http-errors');
 const User = require('../models/user.model');
-
-// Thư viện bcrypt để so sánh mật khẩu
-const bcrypt = require('bcrypt');
-
-// Thư viện express-validator để kiểm tra kết quả validate form
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../services/jwt.service');
 const { validationResult } = require('express-validator');
-
-// Thư viện JWT Service tự viết để phát hành và verify token
-const { 
-    generateAccessToken, 
-    generateRefreshToken, 
-    verifyRefreshToken 
-} = require('../services/jwt.service');
-
-// Redis Repository để quản lý kho Refresh Token và Blacklist
-const { 
-    storeRefreshToken, 
-    getRefreshToken, 
-    removeRefreshToken, 
-    revokeAllUserRefreshTokens, 
-    blacklistAccessToken 
+const {
+    storeRefreshToken,
+    isRefreshTokenValid,
+    revokeRefreshToken,
+    revokeAllUserRefreshTokens,
+    blacklistAccessToken
 } = require('../repositories/token.repository');
 
 /**
- * [POST] /api/v1/auth/register - Đăng ký tài khoản người dùng mới
+ * Register User API
  */
 exports.register = async (req, res, next) => {
     try {
-        // Gom kết quả kiểm tra validation từ các rules ở router
         const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({
-                success: false,
-                code: 'VALIDATION_ERROR',
-                errors: errors.array()
-            });
+        if(!errors.isEmpty()) {
+            throw createError(400, errors.array()[0].msg);
         }
-
         const { fullname, email, password } = req.body;
 
-        // Kiểm tra xem Email đã tồn tại trong DB chưa
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return res.status(409).json({
-                success: false,
-                code: 'EMAIL_EXISTS',
-                message: 'Email này đã được sử dụng.'
-            });
+            throw createError(400, 'Email address is already registered on the system.');
         }
 
-        // Tạo instance User mới và lưu vào DB (Pre-save hook sẽ tự băm mật khẩu)
-        const newUser = new User({ fullname, email, password });
-        await newUser.save();
+        const newUser = await User.create({
+            fullname,
+            email,
+            password,
+            role: 'user'
+        });
 
-        // Trả về response 201 Created kèm dữ liệu an toàn (loại bỏ password)
         res.status(201).json({
             success: true,
-            message: 'Đăng ký tài khoản thành công!',
+            message: 'Account registered successfully.',
             data: {
                 id: newUser._id,
                 fullname: newUser.fullname,
@@ -66,67 +44,52 @@ exports.register = async (req, res, next) => {
             }
         });
     } catch (error) {
-        next(error); // Chuyển lỗi sang Global Error Handler
+        next(error);
     }
 };
 
 /**
- * [POST] /api/v1/auth/login - Đăng nhập và cấp cặp Token (Access & Refresh Token)
+ * Login User API
  */
 exports.login = async (req, res, next) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            throw createError(400, errors.array()[0].msg);
+        }
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                code: 'MISSING_CREDENTIALS',
-                message: 'Vui lòng nhập đầy đủ email và mật khẩu.'
-            });
+            throw createError(400, 'Email and password are required.');
         }
 
-        // Tìm User theo email và phải chưa bị xóa mềm
         const user = await User.findOne({ email, isDeleted: false });
         if (!user) {
-            return res.status(401).json({
-                success: false,
-                code: 'INVALID_CREDENTIALS',
-                message: 'Email hoặc mật khẩu không chính xác.'
-            });
+            throw createError(401, 'Invalid email address or password.');
         }
 
-        // So sánh mật khẩu thô gửi lên với chuỗi băm trong DB
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                code: 'INVALID_CREDENTIALS',
-                message: 'Email hoặc mật khẩu không chính xác.'
-            });
+            throw createError(401, 'Invalid email address or password.');
         }
 
-        // Phát hành cặp Access Token (15 phút) và Refresh Token (7 ngày)
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
+        // Generate Access & Refresh Tokens
+        const { token: accessToken, payload: accessPayload } = generateAccessToken(user);
+        const { token: refreshToken, payload: refreshPayload } = generateRefreshToken(user);
 
-        // Giải mã Refresh Token lấy `jti` để lưu vào Redis
-        const jwt = require('jsonwebtoken');
-        const decodedRefresh = jwt.decode(refreshToken);
-        await storeRefreshToken(user._id.toString(), decodedRefresh.jti, refreshToken);
+        // Store Refresh Token in Redis
+        await storeRefreshToken(user._id.toString(), refreshPayload.jti);
 
-        // Trả về cặp Token cùng thông tin User
         res.json({
             success: true,
-            message: 'Đăng nhập thành công!',
-            data: {
-                accessToken,
-                refreshToken,
-                user: {
-                    id: user._id,
-                    fullname: user.fullname,
-                    email: user.email,
-                    role: user.role
-                }
+            message: 'Logged in successfully.',
+            accessToken,
+            refreshToken,
+            user: {
+                id: user._id,
+                fullname: user.fullname,
+                email: user.email,
+                role: user.role
             }
         });
     } catch (error) {
@@ -135,73 +98,53 @@ exports.login = async (req, res, next) => {
 };
 
 /**
- * [POST] /api/v1/auth/refresh - Cấp đổi Token mới (Refresh Token Rotation & Reuse Detection)
+ * Refresh Token Rotation API
  */
-exports.refreshToken = async (req, res, next) => {
+exports.refresh = async (req, res, next) => {
     try {
         const { refreshToken } = req.body;
 
         if (!refreshToken) {
-            return res.status(400).json({
-                success: false,
-                code: 'TOKEN_MISSING',
-                message: 'Vui lòng cung cấp Refresh Token.'
-            });
+            throw createError(400, 'Refresh Token is required in request body.');
         }
 
-        // 1. Verify chữ ký số và thời hạn của Refresh Token
         let decoded;
         try {
             decoded = verifyRefreshToken(refreshToken);
         } catch (err) {
-            return res.status(401).json({
-                success: false,
-                code: 'REFRESH_TOKEN_INVALID',
-                message: 'Refresh Token không hợp lệ hoặc đã hết hạn.'
-            });
+            throw createError(401, 'Refresh Token is invalid or has expired.', { code: 'REFRESH_TOKEN_EXPIRED' });
         }
 
         const userId = decoded.sub;
         const jti = decoded.jti;
 
-        // 2. Tra cứu Redis xem Refresh Token này còn tồn tại không
-        const storedToken = await getRefreshToken(userId, jti);
+        // Check if Refresh Token is valid in Redis
+        const isValid = await isRefreshTokenValid(userId, jti);
 
-        // PHÁT HIỆN REUSE ATTACK: Nếu token không có trong Redis ➔ Đã bị dùng rồi!
-        if (!storedToken) {
-            // Xóa sạch toàn bộ Refresh Token của User đó trên Redis (Revoke Family)
+        if (!isValid) {
+            // Token Reuse Attack Detected! Revoke all refresh tokens of user
             await revokeAllUserRefreshTokens(userId);
-            return res.status(401).json({
-                success: false,
-                code: 'TOKEN_REUSE_DETECTED',
-                message: 'Phát hiện cảnh báo bảo mật! Toàn bộ phiên làm việc của bạn đã bị hủy.'
-            });
+            throw createError(401, 'Security alert: Refresh Token reuse detected. Please log in again.', { code: 'TOKEN_REUSE_DETECTED' });
         }
 
-        // 3. Xóa Refresh Token cũ khỏi Redis (Rotation)
-        await removeRefreshToken(userId, jti);
+        // Revoke old refresh token (Rotation)
+        await revokeRefreshToken(userId, jti);
 
-        // 4. Kiểm tra User trong DB
         const user = await User.findById(userId);
         if (!user || user.isDeleted) {
-            return res.status(401).json({
-                success: false,
-                code: 'USER_DISABLED',
-                message: 'Tài khoản không tồn tại hoặc đã bị vô hiệu hóa.'
-            });
+            throw createError(401, 'User account does not exist or has been disabled.');
         }
 
-        // 5. Tạo cặp Token mới hoàn toàn (Access & Refresh mới)
-        const newAccessToken = generateAccessToken(user);
-        const newRefreshToken = generateRefreshToken(user);
+        // Generate new Access Token & Refresh Token
+        const { token: newAccessToken } = generateAccessToken(user);
+        const { token: newRefreshToken, payload: newRefreshPayload } = generateRefreshToken(user);
 
-        // 6. Lưu Refresh Token mới vào Redis
-        const jwt = require('jsonwebtoken');
-        const newDecodedRefresh = jwt.decode(newRefreshToken);
-        await storeRefreshToken(userId, newDecodedRefresh.jti, newRefreshToken);
+        // Store new Refresh Token in Redis
+        await storeRefreshToken(userId, newRefreshPayload.jti);
 
         res.json({
             success: true,
+            message: 'Tokens refreshed successfully.',
             data: {
                 accessToken: newAccessToken,
                 refreshToken: newRefreshToken
@@ -213,36 +156,33 @@ exports.refreshToken = async (req, res, next) => {
 };
 
 /**
- * [POST] /api/v1/auth/logout - Đăng xuất & Vô hiệu hóa Tokens
+ * Logout User API
  */
 exports.logout = async (req, res, next) => {
     try {
         const { refreshToken } = req.body;
-        const authUser = req.user; // Nhận từ middleware authenticateJWT
+        const user = req.user;
 
-        // 1. Tính số giây còn sống còn lại của Access Token (exp - now)
-        const nowInSeconds = Math.floor(Date.now() / 1000);
-        const remainingTtl = authUser.exp - nowInSeconds;
+        // Blacklist current Access Token in Redis
+        if (user && user.jti && user.exp) {
+            const nowInSeconds = Math.floor(Date.now() / 1000);
+            const remainingTtl = user.exp - nowInSeconds;
+            await blacklistAccessToken(user.jti, remainingTtl);
+        }
 
-        // Đưa Access Token hiện tại vào Blacklist Redis đến khi nó tự hết hạn
-        await blacklistAccessToken(authUser.jti, remainingTtl);
-
-        // 2. Xóa Refresh Token trên Redis nếu client có gửi kèm
+        // Revoke Refresh Token if provided
         if (refreshToken) {
             try {
-                const jwt = require('jsonwebtoken');
-                const decoded = jwt.decode(refreshToken);
-                if (decoded && decoded.jti) {
-                    await removeRefreshToken(authUser.id, decoded.jti);
-                }
+                const decoded = verifyRefreshToken(refreshToken);
+                await revokeRefreshToken(decoded.sub, decoded.jti);
             } catch (err) {
-                // Bỏ qua lỗi parse refresh token
+                // Ignore error if refresh token was already expired
             }
         }
 
         res.json({
             success: true,
-            message: 'Đăng xuất thành công!'
+            message: 'Logged out successfully.'
         });
     } catch (error) {
         next(error);
@@ -250,11 +190,15 @@ exports.logout = async (req, res, next) => {
 };
 
 /**
- * [GET] /api/v1/auth/me - Lấy thông tin cá nhân của User đang đăng nhập từ req.user
+ * Get Profile API (/me)
  */
 exports.getMe = async (req, res, next) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
+        if (!user) {
+            throw createError(404, 'User profile not found.');
+        }
+
         res.json({
             success: true,
             data: user
