@@ -7,61 +7,53 @@ const Category = require('../models/category.model');
 /**
  * Get List of Drinks API (Filter by keyword, categoryId, isAvailable)
  */
-exports.getDrinks = async (req, res, next) => {
-    try {
-        const { keyword, categoryId, isAvailable } = req.query;
-        let query = { isDeleted: false };
+exports.getDrinks = async (req, res) => {
+    const { keyword, categoryId, isAvailable } = req.query;
+    let query = { isDeleted: false };
 
-        if (keyword) {
-            query.name = { $regex: keyword, $options: 'i' };
-        }
-
-        if (categoryId) {
-            query.category = categoryId;
-        }
-
-        if (isAvailable !== undefined) {
-            query.isAvailable = isAvailable === 'true';
-        }
-
-        const drinks = await Drink.find(query)
-            .populate('category', 'name description')
-            .sort({ createdAt: -1 });
-
-        res.json({
-            success: true,
-            data: drinks
-        });
-    } catch (error) {
-        next(error);
+    if (keyword) {
+        query.name = { $regex: keyword, $options: 'i' };
     }
+
+    if (categoryId) {
+        query.category = categoryId;
+    }
+
+    if (isAvailable !== undefined) {
+        query.isAvailable = isAvailable === 'true';
+    }
+
+    const drinks = await Drink.find(query)
+        .populate('category', 'name description')
+        .sort({ createdAt: -1 });
+
+    res.json({
+        success: true,
+        data: drinks
+    });
 };
 
 /**
  * Get Drink by ID API
  */
-exports.getDrinkById = async (req, res, next) => {
-    try {
-        const drink = await Drink.findOne({ _id: req.params.id, isDeleted: false })
-            .populate('category', 'name description');
+exports.getDrinkById = async (req, res) => {
+    const drink = await Drink.findOne({ _id: req.params.id, isDeleted: false })
+        .populate('category', 'name description');
 
-        if (!drink) {
-            throw createError(404, 'Drink not found.');
-        }
-
-        res.json({
-            success: true,
-            data: drink
-        });
-    } catch (error) {
-        next(error);
+    if (!drink) {
+        throw createError(404, 'Drink not found.');
     }
+
+    res.json({
+        success: true,
+        data: drink
+    });
 };
 
 /**
  * Create Drink API (Admin Only + Multer File Upload)
  */
-exports.createDrink = async (req, res, next) => {
+exports.createDrink = async (req, res) => {
     try {
         const { name, price, category, description, isAvailable, sizes, toppings } = req.body;
 
@@ -107,17 +99,19 @@ exports.createDrink = async (req, res, next) => {
             data: newDrink
         });
     } catch (error) {
+        // try/catch giữ nguyên: catch này có tác dụng phụ thật (xoá file ảnh
+        // vừa upload nếu lưu DB thất bại) — không chỉ đơn thuần forward lỗi.
         if (req.file && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
-        next(error);
+        throw error;
     }
 };
 
 /**
  * Update Drink API (Admin Only + Multer File Upload)
  */
-exports.updateDrink = async (req, res, next) => {
+exports.updateDrink = async (req, res) => {
     try {
         const drinkId = req.params.id;
         const { name, price, category, description, isAvailable, sizes, toppings } = req.body;
@@ -173,33 +167,30 @@ exports.updateDrink = async (req, res, next) => {
             data: updatedDrink
         });
     } catch (error) {
+        // try/catch giữ nguyên: cùng lý do như createDrink ở trên.
         if (req.file && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
-        next(error);
+        throw error;
     }
 };
 
 /**
  * Soft Delete Drink API (Admin Only)
  */
-exports.deleteDrink = async (req, res, next) => {
-    try {
-        const drink = await Drink.findByIdAndUpdate(
-            req.params.id,
-            { isDeleted: true },
-            { new: true }
-        );
+exports.deleteDrink = async (req, res) => {
+    const drink = await Drink.findByIdAndUpdate(
+        req.params.id,
+        { isDeleted: true },
+        { new: true }
+    );
 
-        if (!drink) {
-            throw createError(404, 'Drink to delete was not found.');
-        }
-
-        res.json({
-            success: true,
-            message: 'Drink deleted successfully.'
-        });
-    } catch (error) {
-        next(error);
+    if (!drink) {
+        throw createError(404, 'Drink to delete was not found.');
     }
+
+    res.json({
+        success: true,
+        message: 'Drink deleted successfully.'
+    });
 };
