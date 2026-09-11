@@ -7,15 +7,17 @@ const createError = require('http-errors');
 // Express Web Framework
 const express = require('express');
 const path = require('path');
-const logger = require('morgan');
+const morganLogger = require('morgan');
 
 // CORS middleware allowing React Frontend cross-origin requests
 const cors = require('cors');
+const helmet = require('helmet');
 
 // Database connection function
 const connectDB = require('./config/db');
 
 const env = require('./config/env');
+const logger = require('./config/logger');
 
 // Connect to MongoDB on server startup
 connectDB();
@@ -29,19 +31,26 @@ const apiOrderRouter = require('./routes/api.order.route');
 // Initialize Express application
 const app = express();
 
-const allowedOrigins =  env.CORS_ORIGIN.split(',').map((o) => o.trim());
+const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
 app.use(cors({
-    origin: function (origin, callback){
+    origin: function (origin, callback) {
         //orgin là undefined khi rquest không có header origin
         //post man, curl, hoặc server-to server vẫn nên cho qua
-        if(!origin || allowedOrigins.includes(origin)){
+        if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
-        }else {
+        } else {
             callback(new Error('Not allow by CORS'))
         }
     }
 }))
-app.use(logger('dev'));                    // Log HTTP requests in dev mode
+
+app.use(helmet({
+    // Mặc định helmet chặn resource cross-origin (ảnh, v.v.) — mở lại
+    // vì đây là API + static file server phục vụ 1 frontend khác origin.
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+app.use(morganLogger('dev'));              // Log HTTP requests in dev mode
 app.use(express.json());                   // Parse JSON Request Body
 app.use(express.urlencoded({ extended: false })); // Parse Form URL-encoded data
 
@@ -74,13 +83,13 @@ app.use(function (err, req, res, next) {
 
     //chỉ log chi tiết lỗi thực sự thuộc về server
     if (status >= 500) {
-        console.error(err);
+        logger.error(err.stack || err.message);
     }
 
     res.status(status).json({
         success: false,
         code: err.code || 'INTERNAL_SERVER_ERROR',
-        message: err.expose? err.message : 'Internal Server Error'
+        message: err.expose ? err.message : 'Internal Server Error'
     });
 });
 module.exports = app;

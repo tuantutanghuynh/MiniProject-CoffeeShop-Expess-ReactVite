@@ -1,5 +1,6 @@
 const Redis = require('ioredis');
 const env = require('../config/env');
+const logger = require('../config/logger');
 
 /**
  * Initialize Redis Client connection
@@ -12,9 +13,9 @@ const redisClient = new Redis({
 });
 
 redisClient.connect().then(() => {
-    console.log('Redis Client Connected Successfully');
+    logger.info('Redis Client Connected Successfully');
 }).catch((err) => {
-    console.error('Redis Connection Error:', err.message);
+    logger.error(`Redis Connection Error: ${err.message}`);
 });
 
 module.exports = {
